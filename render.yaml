@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: academic-rag-app
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      chmod +x start_services.sh
+    startCommand: ./start_services.sh
+    envVars:
+      - key: GEMINI_API_KEY
+        value: ваш_ключ_gemini
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHONPATH
+        value: /opt/render/project/src
