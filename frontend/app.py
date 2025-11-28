@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from components.sidebar import Sidebar
 from components.chat_interface import ChatInterface
 from components.results_display import ResultsDisplay
-
+import health_server
 # Конфигурация страницы
 st.set_page_config(
     page_title="Academic Research Assistant",
@@ -45,4 +45,5 @@ def main():
         results_display.render_export_options(st.session_state.messages)
 
 if __name__ == "__main__":
+
     main()
