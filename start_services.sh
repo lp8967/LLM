@@ -2,52 +2,6 @@
 
 set -e
 
-# Функция для запуска тестов
-run_tests() {
-    echo "=== RUNNING AUTOMATED TESTS ==="
-    
-    # Даем бэкенду время на полную инициализацию
-    sleep 5
-    
-    # Тест 1: Базовые тесты API
-    echo "1. Testing API endpoints..."
-    if python -m pytest tests/test_api_integration.py -v --tb=short; then
-        echo "API tests: PASSED"
-    else
-        echo "API tests: FAILED"
-        return 1
-    fi
-    
-    # Тест 2: Тесты RAG качества
-    echo "2. Testing RAG quality..."
-    if python -m pytest tests/test_rag_quality.py -v --tb=short; then
-        echo "RAG tests: PASSED"
-    else
-        echo "RAG tests: FAILED"
-        return 1
-    fi
-    
-    # Тест 3: Интеграционные тесты
-    echo "3. Testing integration with real data..."
-    if python -m pytest tests/test_integration_real_data.py -v --tb=short; then
-        echo "Integration tests: PASSED"
-    else
-        echo "Integration tests: FAILED"
-        return 1
-    fi
-    
-    # Тест 4: Бенчмарк тесты (не блокирующие)
-    echo "4. Running benchmark tests..."
-    if python tests/simple_evaluator.py; then
-        echo "Benchmark tests: COMPLETED"
-    else
-        echo "Benchmark tests: HAS ISSUES"
-    fi
-    
-    echo "=== ALL TESTS COMPLETED ==="
-    return 0
-}
-
 # Функция ожидания готовности сервиса
 wait_for_service() {
     echo "Waiting for $1 to be ready..."
@@ -91,10 +45,14 @@ main() {
     # Инициализация БД
     initialize_database || exit 1
     
-    # ЗАПУСК ФРОНТЕНДА ПЕРВЫМ (основной процесс)
+    # Запуск бэкенда
+    echo "=== STARTING BACKEND ==="
+    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+    BACKEND_PID=$!
+    
+    # Запуск фронтенда
     echo "=== STARTING FRONTEND ==="
-    cd /app
-    streamlit run frontend/app.py \
+    python -m streamlit run frontend/app.py \
         --server.port=8501 \
         --server.address=0.0.0.0 \
         --server.headless=true \
@@ -102,31 +60,26 @@ main() {
         --server.enableXsrfProtection=false &
     FRONTEND_PID=$!
     
-    # Ждем немного перед запуском бэкенда
-    sleep 5
-    
-    # Запуск бэкенда
-    echo "=== STARTING BACKEND ==="
-    cd /app
-    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-    BACKEND_PID=$!
-    
-    # Ожидание готовности бэкенда
+    # Ожидание готовности сервисов
     wait_for_service "Backend" "http://localhost:8000/health" || exit 1
+    sleep 10  # Даем Streamlit больше времени на запуск
     
-    # Запуск автотестов
-    echo "=== STARTING AUTOMATED TESTS ==="
-    if run_tests; then
-        echo "All tests passed successfully"
-    else
-        echo "Some tests failed, but continuing startup..."
-    fi
+    # Запуск nginx (ОСНОВНОЙ ПРОЦЕСС)
+    echo "=== STARTING NGINX PROXY ==="
+    nginx -g "daemon off;" &
+    NGINX_PID=$!
     
-    # Ждем завершения фронтенда (основной процесс)
-    wait $FRONTEND_PID
+    echo "🚀 All services started!"
+    echo "📊 Backend: http://localhost:8000"
+    echo "🎨 Frontend: http://localhost:8501" 
+    echo "🌐 Proxy: http://localhost:8080"
     
-    # Остановка бэкенда при завершении
+    # Ждем завершения nginx (основной процесс)
+    wait $NGINX_PID
+    
+    # Остановка сервисов при завершении
     kill $BACKEND_PID 2>/dev/null || true
+    kill $FRONTEND_PID 2>/dev/null || true
 }
 
 main
