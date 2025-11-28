@@ -91,6 +91,15 @@ main() {
     # Инициализация БД
     initialize_database || exit 1
     
+    # Запуск фронтенда
+    echo "=== STARTING FRONTEND ==="
+    cd /app
+    streamlit run frontend/app.py \
+        --server.port=8501 \
+        --server.address=0.0.0.0 \
+        --server.headless=true \
+        --server.enableCORS=false \
+        --server.enableXsrfProtection=false
     # Запуск бэкенда
     echo "=== STARTING BACKEND ==="
     cd /app
@@ -107,16 +116,6 @@ main() {
     else
         echo "Some tests failed, but continuing startup..."
     fi
-    
-    # Запуск фронтенда
-    echo "=== STARTING FRONTEND ==="
-    cd /app
-    streamlit run frontend/app.py \
-        --server.port=8501 \
-        --server.address=0.0.0.0 \
-        --server.headless=true \
-        --server.enableCORS=false \
-        --server.enableXsrfProtection=false
     
     # Остановка бэкенда при завершении
     kill $BACKEND_PID 2>/dev/null || true
