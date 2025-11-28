@@ -21,6 +21,25 @@ check_port() {
     return 1
 }
 
+# Функция проверки HTTP endpoint
+check_http() {
+    echo "Checking HTTP endpoint: $1..."
+    local max_attempts=30
+    local attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if python -c "import urllib.request; urllib.request.urlopen('$1')" 2>/dev/null; then
+            echo "✅ HTTP endpoint $1 is ready!"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+    
+    echo "❌ HTTP endpoint $1 failed after $max_attempts attempts"
+    return 1
+}
+
 # Функция инициализации базы данных
 initialize_database() {
     echo "=== DATABASE INITIALIZATION ==="
@@ -45,26 +64,40 @@ main() {
     # Инициализация БД
     initialize_database || exit 1
     
-    # ЗАПУСК БЭКЕНДА ПЕРВЫМ (для health check)
+    # ЗАПУСК ФРОНТЕНДА ПЕРВЫМ
+    echo "=== STARTING FRONTEND ==="
+    python -m streamlit run frontend/app.py \
+        --server.port=8501 \
+        --server.address=0.0.0.0 \
+        --server.headless=true \
+        --server.enableCORS=false \
+        --server.enableXsrfProtection=false &
+    FRONTEND_PID=$!
+    
+    # Ждем готовности фронтенда
+    check_port "Frontend" 8501 || exit 1
+    echo "✅ Frontend is running on port 8501"
+    
+    # ЗАПУСК БЭКЕНДА ПОСЛЕ фронтенда
     echo "=== STARTING BACKEND ==="
     python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
     BACKEND_PID=$!
     
     # Ждем готовности бэкенда
     check_port "Backend" 8000 || exit 1
+    check_http "http://localhost:8000/health" || exit 1
+    echo "✅ Backend is running on port 8000 with health check"
     
-    # ЗАПУСК ФРОНТЕНДА КАК ОСНОВНОГО ПРОЦЕССА
-    echo "=== STARTING FRONTEND (MAIN PROCESS) ==="
+    echo "✅ ALL SERVICES ARE RUNNING!"
+    echo "🎨 Frontend: http://localhost:8501"
+    echo "📊 Backend: http://localhost:8000"
+    echo "❤️ Health check: http://localhost:8000/health"
     
-    # Запускаем Streamlit как ОСНОВНОЙ процесс (блокирующий)
-    exec python -m streamlit run frontend/app.py \
-        --server.port=8501 \
-        --server.address=0.0.0.0 \
-        --server.headless=true \
-        --server.enableCORS=false \
-        --server.enableXsrfProtection=false
+    # Ждем завершения фронтенда (основной процесс)
+    wait $FRONTEND_PID
     
-    # Код ниже не выполнится, потому что exec заменил процесс
+    # Если фронтенд упал, останавливаем бэкенд
+    kill $BACKEND_PID 2>/dev/null || true
 }
 
 main
