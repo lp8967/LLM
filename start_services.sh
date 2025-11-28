@@ -2,7 +2,7 @@
 set -e
 
 # переменные
-NGINX_CONF_TEMPLATE=./nginx/nginx.conf
+NGINX_CONF_TEMPLATE=./nginx.conf
 NGINX_CONF=/etc/nginx/nginx.conf
 
 # init DB
